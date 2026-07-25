@@ -18,7 +18,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -129,12 +128,7 @@ func (c *Client) Dial(endpoint string) (*grpc.ClientConn, error) {
 		opts = append(opts, grpc.WithInsecure())
 	}
 
-	proto := "tcp"
-	if url, uerr := url.Parse(endpoint); uerr == nil && url.Scheme == "unix" {
-		proto = "unix"
-		// strip unix:// prefix so certs work
-		endpoint = url.Host
-	}
+	proto, endpoint := endpointDialAddress(endpoint)
 	f := func(a string, t time.Duration) (net.Conn, error) {
 		select {
 		case <-c.ctx.Done():
@@ -150,6 +144,15 @@ func (c *Client) Dial(endpoint string) (*grpc.ClientConn, error) {
 		return nil, err
 	}
 	return conn, nil
+}
+
+func endpointDialAddress(endpoint string) (string, string) {
+	if strings.HasPrefix(endpoint, "unix://") {
+		// Strip the scheme without URL port parsing. Unix socket names can
+		// contain a colon, which current Go URL parsing treats as a port.
+		return "unix", strings.TrimPrefix(endpoint, "unix://")
+	}
+	return "tcp", endpoint
 }
 
 func newClient(cfg *Config) (*Client, error) {

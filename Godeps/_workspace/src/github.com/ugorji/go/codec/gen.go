@@ -122,7 +122,7 @@ const (
 var (
 	genAllTypesSamePkgErr  = errors.New("All types must be in the same package")
 	genExpectArrayOrMapErr = errors.New("unexpected type. Expecting array/map/slice")
-	genBase64enc           = base64.NewEncoding("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789__")
+	genBase64enc           = base64.NewEncoding("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-")
 	genQNameRegex          = regexp.MustCompile(`[A-Za-z_.]+`)
 )
 

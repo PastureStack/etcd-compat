@@ -1,0 +1,14 @@
+#!/bin/bash
+set -e
+
+CA_ROOT=${PLATFORM_CA_ROOT:-/var/lib/rancher/etc/ssl/ca.crt}
+CA_DIRECTORY=/usr/share/ca-certificates/pasturestack
+CA_TARGET=${CA_DIRECTORY}/ca.crt
+
+if [ -f "$CA_ROOT" ] && [ ! -e "$CA_TARGET" ]; then
+    echo "Adding the control-platform CA certificate to the system trust store."
+    mkdir -p "$CA_DIRECTORY"
+    cp "$CA_ROOT" "$CA_TARGET"
+    echo pasturestack/ca.crt >> /etc/ca-certificates.conf
+    update-ca-certificates
+fi

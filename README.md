@@ -1,5 +1,21 @@
 # etcd
 
+## PastureStack compatibility runtime
+
+This GitHub fork packages the preserved etcd 2.3.7 storage and protocol boundary for PastureStack. The maintained candidate is built on Ubuntu 26.04 with a checksum-pinned Go toolchain and published as `ghcr.io/pasturestack/etcd-compat:v2.3.7-pasturestack.2` only after storage, security, and Kubernetes integration gates pass.
+
+The maintained health checks use mutual TLS and verify the managed service identity `etcd.<stack>`. Connecting through a container name or the loopback listener never disables certificate verification.
+
+The preserved v3 client accepts Unix socket endpoints whose filenames contain a colon on current Go toolchains. Internal gRPC errors also use fixed format strings so Go 1.26 validation does not reinterpret upstream error text as a format string.
+
+Three public private-key fixtures inherited from upstream remain only for the original HTTP/2 demo and etcd integration tests. They are unsafe for any deployment, are excluded from the runtime image, and are covered by exact path and content-hash gates. `trivy-secret.yaml` suppresses only those hash-pinned fixtures; every other detected secret blocks publication.
+
+PastureStack is an independent community effort to preserve, audit, and modernize the Rancher 1.6 ecosystem. It is not affiliated with or endorsed by Rancher Labs or SUSE.
+
+**Upstream:** [`rancher/etcd`](https://github.com/rancher/etcd), in the public etcd fork network. This fork preserves upstream Git history, authorship, dates, tags, and license notices. PastureStack maintenance is consolidated into one commit after upstream version `v2.3.7`.
+
+See [PASTURESTACK_MAINTENANCE.md](PASTURESTACK_MAINTENANCE.md), [ORIGIN.md](ORIGIN.md), [COMPATIBILITY.md](COMPATIBILITY.md), and [SECURITY.md](SECURITY.md).
+
 [![Go Report Card](https://goreportcard.com/badge/github.com/coreos/etcd)](https://goreportcard.com/report/github.com/coreos/etcd)
 [![Build Status](https://travis-ci.org/coreos/etcd.svg?branch=master)](https://travis-ci.org/coreos/etcd)
 [![Build Status](https://semaphoreci.com/api/v1/projects/406f9909-2f4f-4839-b59e-95082cb088f1/575109/badge.svg)](https://semaphoreci.com/coreos/etcd)

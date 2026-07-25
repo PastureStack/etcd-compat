@@ -1,0 +1,6 @@
+*.sh text eol=lf
+build text eol=lf
+package/platform-compat/delete text eol=lf
+package/platform-compat/disaster text eol=lf
+package/update-platform-ca text eol=lf
+scripts/* text eol=lf

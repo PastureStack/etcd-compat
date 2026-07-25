@@ -11,7 +11,7 @@ ln -s ${PWD} $GOPATH/src/${REPO_PATH}
 
 eval $(go env)
 
-GIT_SHA=`git rev-parse --short HEAD || echo "GitNotFound"`
+GIT_SHA=${GIT_SHA:-`git rev-parse --short HEAD 2>/dev/null || echo "GitNotFound"`}
 
 val=$(go version)
 # if 'go version' contains string 'devel', it assumes the go tip branch,
