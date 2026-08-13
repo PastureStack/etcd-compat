@@ -142,7 +142,7 @@ func (d *decodeState) processHeaderField(f hpack.HeaderField) {
 	case "grpc-encoding":
 		d.encoding = f.Value
 	case "grpc-status":
-		code, err := strconv.Atoi(f.Value)
+		code, err := strconv.ParseUint(f.Value, 10, 32)
 		if err != nil {
 			d.setErr(StreamErrorf(codes.Internal, "transport: malformed grpc-status: %v", err))
 			return

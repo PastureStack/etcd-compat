@@ -35,6 +35,8 @@ type decoder struct {
 	crc hash.Hash32
 }
 
+const maxWALEntrySizeLimit = int64(10 * 1024 * 1024)
+
 func newDecoder(rc io.ReadCloser) *decoder {
 	return &decoder{
 		br:  bufio.NewReader(rc),
@@ -51,6 +53,9 @@ func (d *decoder) decode(rec *walpb.Record) error {
 	l, err := readInt64(d.br)
 	if err != nil {
 		return err
+	}
+	if l < 0 || l >= maxWALEntrySizeLimit {
+		return ErrMaxWALEntrySizeLimitExceeded
 	}
 	data := make([]byte, l)
 	if _, err = io.ReadFull(d.br, data); err != nil {

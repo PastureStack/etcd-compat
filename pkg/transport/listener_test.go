@@ -124,6 +124,9 @@ func TestNewTransportTLSInfo(t *testing.T) {
 		if trans.TLSClientConfig == nil {
 			t.Fatalf("#%d: want non-nil TLSClientConfig", i)
 		}
+		if trans.TLSClientConfig.MinVersion != tls.VersionTLS12 {
+			t.Fatalf("#%d: minimum TLS version = %d, want TLS 1.2", i, trans.TLSClientConfig.MinVersion)
+		}
 	}
 }
 

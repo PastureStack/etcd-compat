@@ -118,9 +118,22 @@ type watcherStream struct {
 	id    int64
 
 	// lastRev is revision last successfully sent over outc
+	revMu   sync.Mutex
 	lastRev int64
-	// resumec indicates the stream must recover at a given revision
-	resumec chan int64
+	// resumec indicates the stream must recover from its latest delivered revision
+	resumec chan struct{}
+}
+
+func (ws *watcherStream) revision() int64 {
+	ws.revMu.Lock()
+	defer ws.revMu.Unlock()
+	return ws.lastRev
+}
+
+func (ws *watcherStream) setRevision(rev int64) {
+	ws.revMu.Lock()
+	ws.lastRev = rev
+	ws.revMu.Unlock()
 }
 
 func NewWatcher(c *Client) Watcher {
@@ -227,7 +240,7 @@ func (w *watcher) addStream(resp *pb.WatchResponse, pendingReq *watchRequest) {
 		outc:    ret,
 		// buffered so unlikely to block on sending while holding mu
 		recvc:   make(chan *WatchResponse, 4),
-		resumec: make(chan int64),
+		resumec: make(chan struct{}),
 	}
 
 	if pendingReq.rev == 0 {
@@ -408,8 +421,8 @@ func (w *watcher) serveStream(ws *watcherStream) {
 			} else {
 				newRev = wrs[0].Header.Revision
 			}
-			if newRev != ws.lastRev {
-				ws.lastRev = newRev
+			if newRev != ws.revision() {
+				ws.setRevision(newRev)
 			}
 			wrs[0] = nil
 			wrs = wrs[1:]
@@ -423,22 +436,19 @@ func (w *watcher) serveStream(ws *watcherStream) {
 				resuming = false
 				// trim events already seen
 				for i := 0; i < len(wr.Events); i++ {
-					if wr.Events[i].Kv.ModRevision > ws.lastRev {
+					if wr.Events[i].Kv.ModRevision > ws.revision() {
 						wr.Events = wr.Events[i:]
 						break
 					}
 				}
 				// only forward new events
-				if wr.Events[0].Kv.ModRevision == ws.lastRev {
+				if wr.Events[0].Kv.ModRevision == ws.revision() {
 					break
 				}
 			}
 			// TODO don't keep buffering if subscriber stops reading
 			wrs = append(wrs, wr)
-		case resumeRev := <-ws.resumec:
-			if resumeRev != ws.lastRev {
-				panic("unexpected resume revision")
-			}
+		case <-ws.resumec:
 			wrs = nil
 			resuming = true
 		case <-w.donec:
@@ -503,10 +513,12 @@ func (w *watcher) resumeWatchers(wc pb.Watch_WatchClient) error {
 
 	for _, ws := range streams {
 		// reconstruct watcher from initial request
-		if ws.lastRev != 0 {
-			ws.initReq.rev = ws.lastRev
+		resumeRev := ws.revision()
+		req := ws.initReq
+		if resumeRev != 0 {
+			req.rev = resumeRev
 		}
-		if err := wc.Send(ws.initReq.toPB()); err != nil {
+		if err := wc.Send(req.toPB()); err != nil {
 			return err
 		}
 
@@ -525,7 +537,7 @@ func (w *watcher) resumeWatchers(wc pb.Watch_WatchClient) error {
 		w.streams[ws.id] = ws
 		w.mu.Unlock()
 
-		ws.resumec <- ws.lastRev
+		ws.resumec <- struct{}{}
 	}
 	return nil
 }

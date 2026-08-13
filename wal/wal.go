@@ -52,12 +52,13 @@ const (
 var (
 	plog = capnslog.NewPackageLogger("github.com/coreos/etcd", "wal")
 
-	ErrMetadataConflict = errors.New("wal: conflicting metadata found")
-	ErrFileNotFound     = errors.New("wal: file not found")
-	ErrCRCMismatch      = errors.New("wal: crc mismatch")
-	ErrSnapshotMismatch = errors.New("wal: snapshot mismatch")
-	ErrSnapshotNotFound = errors.New("wal: snapshot not found")
-	crcTable            = crc32.MakeTable(crc32.Castagnoli)
+	ErrMetadataConflict             = errors.New("wal: conflicting metadata found")
+	ErrFileNotFound                 = errors.New("wal: file not found")
+	ErrCRCMismatch                  = errors.New("wal: crc mismatch")
+	ErrSnapshotMismatch             = errors.New("wal: snapshot mismatch")
+	ErrSnapshotNotFound             = errors.New("wal: snapshot not found")
+	ErrMaxWALEntrySizeLimitExceeded = errors.New("wal: max entry size limit exceeded")
+	crcTable                        = crc32.MakeTable(crc32.Castagnoli)
 )
 
 // WAL is a logical representation of the stable storage.

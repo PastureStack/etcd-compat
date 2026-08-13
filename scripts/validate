@@ -1,0 +1,215 @@
+#!/bin/bash
+set -euo pipefail
+
+repo_root=$(cd "$(dirname "$0")/.." && pwd)
+cd "${repo_root}"
+
+for script in \
+    build \
+    migration/fetch-checkpoints.sh \
+    migration/preflight-v2.sh \
+    migration/test-v2-to-v3.sh \
+    migration/tests/test-checkpoints.sh \
+    package/platform-compat/run.sh \
+    package/platform-compat/delete \
+    package/platform-compat/disaster \
+    package/update-platform-ca; do
+    bash -n "${script}"
+done
+
+bash migration/tests/test-checkpoints.sh
+
+required_markers=(
+    'ARG UBUNTU_IMAGE=ubuntu:26.04@sha256:678c6550cc43645e08669028bc177f50be4e7c5b8cca677067b1914d4afc7a03'
+    'GO_VERSION=1.26.5'
+    'GO_LINUX_AMD64_SHA256=5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053'
+    'org.opencontainers.image.source="https://github.com/PastureStack/etcd-compat"'
+    'ARG IMAGE_VERSION=2.3.8'
+    'org.opencontainers.image.version="${IMAGE_VERSION}"'
+    'ubuntu:26.04@sha256:678c6550cc43645e08669028bc177f50be4e7c5b8cca677067b1914d4afc7a03'
+    "UBUNTU_APT_SNAPSHOT='20260808T000000Z'"
+    "UBUNTU_APT_SUITE='resolute'"
+    '6077d27c6b6f8b23590cb01ff877ed8c804a67a5442cc32b5a33da10d2bd0e90'
+    'c1f53878bdada693da7fb64a28c06b7dd65a43b8452e6fcad670c0d09c77f293'
+    'GIDDYUP_ARCHIVE_SHA256=394e923a30d278075c3d980ab5d4ce87f0bfce68c4a42c00de40195bb902d5d4'
+    'package/giddyup-go1.26.patch'
+    'package/platform-compat/run.sh'
+    '/opt/pasturestack/run.sh'
+    'PLATFORM_METADATA_URL'
+    'PLATFORM_ACCESS_KEY'
+    'PLATFORM_SECRET_KEY'
+    'ETCD_HEALTHCHECK_SERVER_NAME'
+    'PastureStack is an independent community effort to preserve, audit, and modernize the Rancher 1.6 ecosystem. It is not affiliated with or endorsed by Rancher Labs or SUSE.'
+)
+
+for marker in "${required_markers[@]}"; do
+    if ! grep -R -Fq "${marker}" \
+        Dockerfile README.md PASTURESTACK_MAINTENANCE.md package scripts; then
+        echo "ETCD_COMPAT_REQUIRED_MARKER_MISSING marker=${marker}" >&2
+        exit 1
+    fi
+done
+
+if grep -R -Eiq \
+    'v[0-9]+\.[0-9]+\.[0-9]+-(pasturestack|rancher)[0-9.]*' \
+    Dockerfile README.md PASTURESTACK_MAINTENANCE.md COMPATIBILITY.md \
+    SECURITY.md package migration security .github; then
+    echo "ETCD_COMPAT_BRANDED_VERSION_SUFFIX_PRESENT" >&2
+    exit 1
+fi
+
+if [ "$(grep -Fc '"status":"not_affected"' security/openvex.json)" -ne 35 ] || \
+   [ "$(grep -Fc '"justification":"vulnerable_code_not_present"' security/openvex.json)" -ne 35 ] || \
+   [ "$(grep -Fc 'pkg:deb/ubuntu/linux-libc-dev@7.0.0-29.29?arch=amd64&distro=ubuntu-26.04' security/openvex.json)" -ne 35 ]; then
+    echo "ETCD_COMPAT_OPENVEX_SCOPE_CHANGED" >&2
+    exit 1
+fi
+
+if [ "$(grep -Eo '"status":"[^"]+"' security/openvex.json | LC_ALL=C sort -u)" != '"status":"not_affected"' ]; then
+    echo "ETCD_COMPAT_OPENVEX_STATUS_CHANGED" >&2
+    exit 1
+fi
+
+if [ "$(grep -Fc 'URIs: https://snapshot.ubuntu.com/ubuntu/%s/' Dockerfile)" -ne 2 ]; then
+    echo "ETCD_COMPAT_UBUNTU_SNAPSHOT_COVERAGE_CHANGED" >&2
+    exit 1
+fi
+
+if [ "$(grep -Fc 'Acquire::https::CaInfo' Dockerfile)" -ne 2 ]; then
+    echo "ETCD_COMPAT_UBUNTU_CA_BINDING_CHANGED" >&2
+    exit 1
+fi
+
+if grep -Fq 'apt-get --snapshot' Dockerfile; then
+    echo "ETCD_COMPAT_UBUNTU_SNAPSHOT_FALLBACK_PRESENT" >&2
+    exit 1
+fi
+
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    while read -r expected path; do
+        actual=$(git hash-object --path="$path" "$path")
+        if [ "$actual" != "$expected" ]; then
+            echo "ETCD_COMPAT_INHERITED_FIXTURE_CHANGED path=${path}" >&2
+            exit 1
+        fi
+    done <<'EOF'
+a15a6abaf78f9818bf937f0df715bc2f5708bba0 Godeps/_workspace/src/golang.org/x/net/http2/h2demo/rootCA.key
+f329c1421209cab976f849fd4d6903fafa60dd78 Godeps/_workspace/src/golang.org/x/net/http2/h2demo/server.key
+631f398cec6e74a3db01656b77c4b09c540a4171 integration/fixtures/server.key.insecure
+EOF
+else
+    while read -r expected_lf expected_crlf path; do
+        actual=$(sha256sum "$path" | awk '{print $1}')
+        if [ "$actual" != "$expected_lf" ] && [ "$actual" != "$expected_crlf" ]; then
+            echo "ETCD_COMPAT_INHERITED_FIXTURE_CHANGED path=${path}" >&2
+            exit 1
+        fi
+    done <<'EOF'
+dfc6849f8ec095eb5476327c5ceb1352682c6160685150f6837230a8197c4dfd 979af8a4415d1ad6a13caed4c314b72b541facabee964a3b74305c43c0a515eb Godeps/_workspace/src/golang.org/x/net/http2/h2demo/rootCA.key
+2dccb2e6594986307311639d75601a232c0c0039f6a6f17b6dd417cb61513756 1fec27ed7924704212a2a14a6238264b705634dac62771326b46262736450296 Godeps/_workspace/src/golang.org/x/net/http2/h2demo/server.key
+c3419809e3d1eca8a95b90223915f979dab7563cb7722ca2542c1f43e1769326 411b12a35374e3370b8501cb504588601f03d88ad9d96cbab9fdd6e58b7c494d integration/fixtures/server.key.insecure
+EOF
+fi
+
+if [ "$(grep -c '^[[:space:]]*path:' trivy-secret.yaml)" -ne 2 ]; then
+    echo "ETCD_COMPAT_SECRET_ALLOWLIST_SCOPE_CHANGED" >&2
+    exit 1
+fi
+
+if grep -R -Eiq \
+    'C:\\Users\\|/home/[^/[:space:]]+/(pstk|source|rc[0-9]+)|10\.0\.0\.[0-9]{1,3}|rancher-[0-9]+\.[0-9]+-|rc[0-9]+[-_/]' \
+    Dockerfile README.md PASTURESTACK_MAINTENANCE.md ORIGIN.md COMPATIBILITY.md \
+    SECURITY.md trivy-secret.yaml package migration/README.md \
+    migration/checkpoints.lock.tsv migration/*.sh migration/tests security .github; then
+    echo "ETCD_COMPAT_PRIVATE_OR_STAGING_REFERENCE_PRESENT" >&2
+    exit 1
+fi
+
+if grep -R -Eioh 'ghcr\.io/[a-z0-9._-]+/' \
+    Dockerfile README.md PASTURESTACK_MAINTENANCE.md ORIGIN.md COMPATIBILITY.md \
+    SECURITY.md package migration/README.md migration/checkpoints.lock.tsv \
+    migration/*.sh migration/tests security .github \
+    | grep -Ev '^ghcr\.io/pasturestack/$' >/dev/null; then
+    echo "ETCD_COMPAT_UNAPPROVED_REGISTRY_NAMESPACE_PRESENT" >&2
+    exit 1
+fi
+
+if grep -R -Fq 'eval $1' package; then
+    echo "ETCD_COMPAT_UNSAFE_COMMAND_DISPATCH_PRESENT" >&2
+    exit 1
+fi
+
+if grep -R -Fq 'grpc.Errorf(codes.Internal, err.Error())' etcdserver/api/v3rpc; then
+    echo "ETCD_COMPAT_NON_CONSTANT_GRPC_ERROR_FORMAT_PRESENT" >&2
+    exit 1
+fi
+
+if ! grep -Fq 'MinVersion:   tls.VersionTLS12' pkg/transport/listener.go; then
+    echo "ETCD_COMPAT_TLS12_MINIMUM_MISSING" >&2
+    exit 1
+fi
+
+if ! grep -Eq 'readBytesLimit[[:space:]]+uint64 = 512 \* 1024 \* 1024' rafthttp/msg_codec.go || \
+   ! grep -Fq 'maxWALEntrySizeLimit = int64(10 * 1024 * 1024)' wal/decoder.go; then
+    echo "ETCD_COMPAT_DECODER_SIZE_LIMIT_MISSING" >&2
+    exit 1
+fi
+
+if [ "$(grep -Fc 'openManagedRoot(' package/etcdwrapper/main.go)" -lt 3 ] || \
+   ! grep -Fq 'return os.OpenRoot(rootPath)' package/etcdwrapper/main.go; then
+    echo "ETCD_COMPAT_MANAGED_ROOT_CONFINEMENT_MISSING" >&2
+    exit 1
+fi
+
+if ! grep -Fq 'strconv.ParseUint(strings.TrimSpace(value), 10, 16)' tools/etcd-top/etcd-top.go || \
+   ! grep -Fq 'const maxTTLSeconds' etcdserver/etcdhttp/client.go || \
+   ! grep -Fq 'strconv.ParseInt(r.FormValue("ttl"), 10, 64)' etcdserver/etcdhttp/client.go || \
+   ! grep -Fq 'strconv.ParseInt(n, 10, 32)' Godeps/_workspace/src/github.com/prometheus/procfs/proc.go || \
+   ! grep -Fq 'strconv.ParseUint(f.Value, 10, 32)' Godeps/_workspace/src/google.golang.org/grpc/transport/http_util.go; then
+    echo "ETCD_COMPAT_INTEGER_BOUNDARY_VALIDATION_MISSING" >&2
+    exit 1
+fi
+
+if [ "$(grep -Fc 'strconv.ParseUint(fields[1], 10, 29)' Godeps/_workspace/src/github.com/gogo/protobuf/proto/properties.go)" -ne 1 ] || \
+   [ "$(grep -Fc 'strconv.ParseUint(fields[1], 10, 29)' Godeps/_workspace/src/github.com/golang/protobuf/proto/properties.go)" -ne 1 ] || \
+   [ "$(grep -Fc 'fieldNumber > (1<<29)-1' Godeps/_workspace/src/github.com/gogo/protobuf/proto/properties.go)" -ne 1 ] || \
+   [ "$(grep -Fc 'fieldNumber > (1<<29)-1' Godeps/_workspace/src/github.com/golang/protobuf/proto/properties.go)" -ne 1 ]; then
+    echo "ETCD_COMPAT_PROTOBUF_FIELD_BOUND_MISSING" >&2
+    exit 1
+fi
+
+if ! grep -Fq 'managedTLSFile(filepath.Join(trustedTLSRoot, "ca.pem"), os.Getenv("ETCDCTL_CA_FILE"))' etcdctl/command/util.go || \
+   ! grep -Fq 'validatedPeerMembersURL' etcdserver/cluster_util.go || \
+   ! grep -Fq 'X-Content-Type-Options", "nosniff"' Godeps/_workspace/src/github.com/prometheus/client_golang/prometheus/http.go || \
+   grep -Fq 'Transport encoding header %q = %q' Godeps/_workspace/src/golang.org/x/net/http2/transport.go; then
+    echo "ETCD_COMPAT_SECURITY_BOUNDARY_VALIDATION_MISSING" >&2
+    exit 1
+fi
+
+if ! grep -Fq 'strings.HasPrefix(endpoint, "unix://")' clientv3/client.go; then
+    echo "ETCD_COMPAT_UNIX_ENDPOINT_COMPATIBILITY_MISSING" >&2
+    exit 1
+fi
+
+if grep -R -Fq 'InsecureSkipVerify' package --exclude='*_test.go'; then
+    echo "ETCD_COMPAT_INSECURE_TLS_VERIFICATION_PRESENT" >&2
+    exit 1
+fi
+
+if grep -R -Eq '(^|[[:space:]])(-k|--insecure)([[:space:]]|$)' \
+    package/platform-compat package/update-platform-ca; then
+    echo "ETCD_COMPAT_INSECURE_CURL_PRESENT" >&2
+    exit 1
+fi
+
+if grep -R -Eq 'package/rancher-legacy|/opt/rancher|update-rancher-ssl' \
+    Dockerfile package; then
+    echo "ETCD_COMPAT_OLD_MAINTAINED_PATH_PRESENT" >&2
+    exit 1
+fi
+
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git diff --check
+fi
+
+echo "ETCD_COMPAT_MIGRATION_VALIDATION_OK"

@@ -1,0 +1,20 @@
+--- a/election/proxy.go
++++ b/election/proxy.go
+@@ -82,7 +82,7 @@ func (w *Watcher) Forwarder() error {
+ 	go w.client.OnChange(1, func(version string) {
+ 		currentLeaderIp := w.leader.PrimaryIp
+ 		if _, _, err := w.getLeader(); err != nil {
+-			logrus.Error("Error getting leader: %s", err)
++			logrus.Errorf("Error getting leader: %s", err)
+ 		}
+ 
+ 		if w.leader.PrimaryIp != currentLeaderIp {
+@@ -98,7 +98,7 @@ func (w *Watcher) Forwarder() error {
+ 				return err
+ 			}
+ 		} else {
+-			return errors.New("Ports not specified: src:" + string(w.port) + ", dst:" + string(w.dstPort))
++			return fmt.Errorf("Ports not specified: src:%d, dst:%d", w.port, w.dstPort)
+ 		}
+ 	}
+ 

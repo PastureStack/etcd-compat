@@ -16,6 +16,7 @@ package v3rpc
 
 import (
 	"io"
+	"sync"
 	"time"
 
 	"github.com/coreos/etcd/etcdserver"
@@ -41,10 +42,23 @@ func NewWatchServer(s *etcdserver.EtcdServer) pb.WatchServer {
 }
 
 var (
-	// expose for testing purpose. External test can change this to a
-	// small value to finish fast.
-	ProgressReportInterval = 10 * time.Minute
+	// External tests can temporarily shorten this interval through the
+	// synchronized accessors without racing active watch streams.
+	progressReportInterval   = 10 * time.Minute
+	progressReportIntervalMu sync.RWMutex
 )
+
+func GetProgressReportInterval() time.Duration {
+	progressReportIntervalMu.RLock()
+	defer progressReportIntervalMu.RUnlock()
+	return progressReportInterval
+}
+
+func SetProgressReportInterval(newInterval time.Duration) {
+	progressReportIntervalMu.Lock()
+	progressReportInterval = newInterval
+	progressReportIntervalMu.Unlock()
+}
 
 const (
 	// We send ctrl response inside the read loop. We do not want
@@ -160,7 +174,7 @@ func (sws *serverWatchStream) sendLoop() {
 	// watch responses pending on a watch id creation message
 	pending := make(map[storage.WatchID][]*pb.WatchResponse)
 
-	progressTicker := time.NewTicker(ProgressReportInterval)
+	progressTicker := time.NewTicker(GetProgressReportInterval())
 	defer progressTicker.Stop()
 
 	for {

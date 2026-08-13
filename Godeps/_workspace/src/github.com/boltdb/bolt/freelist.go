@@ -162,11 +162,11 @@ func (f *freelist) read(p *page) {
 	idx, count := 0, int(p.count)
 	if count == 0xFFFF {
 		idx = 1
-		count = int(((*[maxAllocSize]pgid)(unsafe.Pointer(&p.ptr)))[0])
+		count = int(*(*pgid)(p.data()))
 	}
 
 	// Copy the list of page ids from the freelist.
-	ids := ((*[maxAllocSize]pgid)(unsafe.Pointer(&p.ptr)))[idx:count]
+	ids := unsafe.Slice((*pgid)(p.data()), count)[idx:count]
 	f.ids = make([]pgid, len(ids))
 	copy(f.ids, ids)
 
@@ -191,11 +191,12 @@ func (f *freelist) write(p *page) error {
 	// number then we handle it by putting the size in the first element.
 	if len(ids) < 0xFFFF {
 		p.count = uint16(len(ids))
-		copy(((*[maxAllocSize]pgid)(unsafe.Pointer(&p.ptr)))[:], ids)
+		copy(unsafe.Slice((*pgid)(p.data()), len(ids)), ids)
 	} else {
 		p.count = 0xFFFF
-		((*[maxAllocSize]pgid)(unsafe.Pointer(&p.ptr)))[0] = pgid(len(ids))
-		copy(((*[maxAllocSize]pgid)(unsafe.Pointer(&p.ptr)))[1:], ids)
+		pageIDs := unsafe.Slice((*pgid)(p.data()), len(ids)+1)
+		pageIDs[0] = pgid(len(ids))
+		copy(pageIDs[1:], ids)
 	}
 
 	return nil

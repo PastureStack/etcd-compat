@@ -18,14 +18,50 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
+	"regexp"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/coreos/etcd/Godeps/_workspace/src/github.com/coreos/go-semver/semver"
 	"github.com/coreos/etcd/pkg/types"
 	"github.com/coreos/etcd/version"
 )
+
+var safePeerURL = regexp.MustCompile(`^https?://(?:[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?|\[[0-9A-Fa-f:.]+\]):[0-9]{1,5}$`)
+
+// validatedPeerMembersURL validates the complete peer authority before it is
+// used as a request target. Peer endpoints are administrator-supplied cluster
+// configuration, but fragments, credentials, paths and malformed authorities
+// must never be allowed to change the fixed /members request.
+func validatedPeerMembersURL(raw string) (string, error) {
+	// Apply one anchored expression to the complete request target before
+	// parsing it. This excludes credentials, paths, queries and fragments and
+	// ensures the network request can only use the configured peer authority.
+	if !safePeerURL.MatchString(raw) {
+		return "", fmt.Errorf("invalid peer URL")
+	}
+	us, err := types.NewURLs([]string{raw})
+	if err != nil {
+		return "", err
+	}
+	u := us[0]
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", fmt.Errorf("peer URL must use HTTP or HTTPS")
+	}
+	host, port, err := net.SplitHostPort(u.Host)
+	parsedPort, portErr := strconv.ParseUint(port, 10, 16)
+	if err != nil || host == "" || portErr != nil || parsedPort == 0 {
+		return "", fmt.Errorf("invalid peer authority")
+	}
+	if u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return "", fmt.Errorf("peer URL must not contain credentials, query, or fragment")
+	}
+	u.Path = "/members"
+	return u.String(), nil
+}
 
 // isMemberBootstrapped tries to check if the given member has been bootstrapped
 // in the given cluster.
@@ -63,10 +99,17 @@ func getClusterFromRemotePeers(urls []string, timeout time.Duration, logerr bool
 		Timeout:   timeout,
 	}
 	for _, u := range urls {
-		resp, err := cc.Get(u + "/members")
+		membersURL, err := validatedPeerMembersURL(u)
 		if err != nil {
 			if logerr {
-				plog.Warningf("could not get cluster response from %s: %v", u, err)
+				plog.Warning("ignored an invalid peer URL")
+			}
+			continue
+		}
+		resp, err := cc.Get(membersURL)
+		if err != nil {
+			if logerr {
+				plog.Warning("could not get cluster response from a configured peer")
 			}
 			continue
 		}

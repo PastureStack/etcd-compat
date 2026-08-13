@@ -177,7 +177,7 @@ func (h *snapshotHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	m, err := dec.decode()
 	if err != nil {
 		msg := fmt.Sprintf("failed to decode raft message (%v)", err)
-		plog.Errorf(msg)
+		plog.Error(msg)
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
@@ -205,7 +205,7 @@ func (h *snapshotHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			v.WriteTo(w)
 		default:
 			msg := fmt.Sprintf("failed to process raft message (%v)", err)
-			plog.Warningf(msg)
+			plog.Warning(msg)
 			http.Error(w, msg, http.StatusInternalServerError)
 		}
 		return

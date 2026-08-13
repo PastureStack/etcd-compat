@@ -119,7 +119,7 @@ func (info TLSInfo) baseConfig() (*tls.Config, error) {
 
 	cfg := &tls.Config{
 		Certificates: []tls.Certificate{tlsCert},
-		MinVersion:   tls.VersionTLS10,
+		MinVersion:   tls.VersionTLS12,
 	}
 	return cfg, nil
 }
@@ -171,7 +171,7 @@ func (info TLSInfo) ClientConfig() (*tls.Config, error) {
 			return nil, err
 		}
 	} else {
-		cfg = &tls.Config{}
+		cfg = &tls.Config{MinVersion: tls.VersionTLS12}
 	}
 
 	CAFiles := info.cafiles()

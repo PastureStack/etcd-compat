@@ -1,0 +1,9 @@
+version	linux_amd64_sha256	purpose
+3.0.17	274c46a7f8d26f7ae99d6880610f54933cbcf7f3beafa19236c52eb5df8c7a0b	rolling-upgrade-from-v2-3
+3.1.20	704a93ae5e01eade17c36d9b44a5009ee43fbe15a691ec682e80fc7df07417f6	sequential-minor-checkpoint
+3.2.32	a3ed4f4e36184da9e89f939609cb13f85f409ba4b49cb889312c46213ae42a45	sequential-minor-checkpoint
+3.3.27	f9058f93e2f40343fd0bbbfce39ddb8a7afd8b03be020b7decc040d897065ded	sequential-minor-checkpoint
+3.4.45	ea50bef5130955962146afecf7c274f47ec58231e01b0113b72ea2784cdbc23f	v2-to-v3-store-migration
+3.5.33	5025b5b24d81a9616b6e284ccd439b9a3df055ef8fdcdc142af3ec8f6a3b3c95	v2-store-removal-check
+3.6.14	ffe840ff9295808e88cce2794a18a5ac87f12a5203c8314d0bf6aa119b41bac5	sequential-minor-checkpoint
+3.7.1	e8cd3fa8064c98137c5dbd78b76f969417ace84efb83c481041d7a52ffdd8fb9	migration-target

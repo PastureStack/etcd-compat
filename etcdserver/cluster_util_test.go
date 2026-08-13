@@ -23,6 +23,40 @@ import (
 	"github.com/coreos/etcd/version"
 )
 
+func TestValidatedPeerMembersURL(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+		ok   bool
+	}{
+		{name: "IPv4 HTTP", in: "http://127.0.0.1:2380", want: "http://127.0.0.1:2380/members", ok: true},
+		{name: "DNS HTTPS", in: "https://peer-1.example.internal:2380", want: "https://peer-1.example.internal:2380/members", ok: true},
+		{name: "IPv6 HTTP", in: "http://[2001:db8::1]:2380", want: "http://[2001:db8::1]:2380/members", ok: true},
+		{name: "maximum port", in: "https://peer.example:65535", want: "https://peer.example:65535/members", ok: true},
+		{name: "fragment injection", in: "http://127.0.0.1:2380#ignored", ok: false},
+		{name: "query injection", in: "http://127.0.0.1:2380?target=metadata", ok: false},
+		{name: "credential injection", in: "http://user:pass@127.0.0.1:2380", ok: false},
+		{name: "path injection", in: "http://127.0.0.1:2380/admin", ok: false},
+		{name: "unsupported scheme", in: "file:///etc/passwd", ok: false},
+		{name: "unsupported network scheme", in: "ftp://127.0.0.1:2380", ok: false},
+		{name: "missing port", in: "http://127.0.0.1", ok: false},
+		{name: "zero port", in: "http://127.0.0.1:0", ok: false},
+		{name: "out-of-range port", in: "http://127.0.0.1:65536", ok: false},
+		{name: "control character", in: "http://peer.example:2380\n@127.0.0.1:80", ok: false},
+	}
+	for _, tt := range tests {
+		got, err := validatedPeerMembersURL(tt.in)
+		if (err == nil) != tt.ok {
+			t.Errorf("%s: error = %v, want success %t", tt.name, err, tt.ok)
+			continue
+		}
+		if err == nil && got != tt.want {
+			t.Errorf("%s: URL = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestDecideClusterVersion(t *testing.T) {
 	tests := []struct {
 		vers  map[string]*version.Versions

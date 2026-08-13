@@ -216,6 +216,13 @@ type Properties struct {
 	packedDec decoder
 }
 
+func protobufWireTag(fieldNumber, wireType int) uint32 {
+	if fieldNumber < 0 || fieldNumber > (1<<29)-1 || wireType < 0 || wireType > 7 {
+		return 0
+	}
+	return uint32(fieldNumber)<<3 | uint32(wireType)
+}
+
 // String formats the properties in the protobuf struct field tag style.
 func (p *Properties) String() string {
 	s := p.Wire
@@ -295,11 +302,13 @@ func (p *Properties) Parse(s string) {
 		return
 	}
 
-	var err error
-	p.Tag, err = strconv.Atoi(fields[1])
+	// Protocol Buffer field numbers are limited to 29 bits. Parse with that
+	// bound before converting to the architecture-sized representation.
+	tag, err := strconv.ParseUint(fields[1], 10, 29)
 	if err != nil {
 		return
 	}
+	p.Tag = int(tag)
 
 	for i := 2; i < len(fields); i++ {
 		f := fields[i]
@@ -637,7 +646,7 @@ func (p *Properties) setTag(lockGetProp bool) {
 	if p.Packed {
 		wire = WireBytes
 	}
-	x := uint32(p.Tag)<<3 | uint32(wire)
+	x := protobufWireTag(p.Tag, wire)
 	i := 0
 	for i = 0; x > 127; i++ {
 		p.tagbuf[i] = 0x80 | uint8(x&0x7F)

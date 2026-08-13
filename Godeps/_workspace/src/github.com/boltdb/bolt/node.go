@@ -200,9 +200,13 @@ func (n *node) write(p *page) {
 		panic(fmt.Sprintf("inode overflow: %d (pgid=%d)", len(n.inodes), p.id))
 	}
 	p.count = uint16(len(n.inodes))
+	if p.count == 0 {
+		return
+	}
 
 	// Loop over each item and write it to the page.
-	b := (*[maxAllocSize]byte)(unsafe.Pointer(&p.ptr))[n.pageElementSize()*len(n.inodes):]
+	dataOffset := pageHeaderSize + n.pageElementSize()*len(n.inodes)
+	b := unsafe.Slice((*byte)(unsafe.Add(unsafe.Pointer(p), dataOffset)), n.size()-dataOffset)
 	for i, item := range n.inodes {
 		_assert(len(item.key) > 0, "write: zero-length inode key")
 
@@ -221,15 +225,7 @@ func (n *node) write(p *page) {
 			_assert(elem.pgid != p.id, "write: circular dependency occurred")
 		}
 
-		// If the length of key+value is larger than the max allocation size
-		// then we need to reallocate the byte array pointer.
-		//
-		// See: https://github.com/boltdb/bolt/pull/335
 		klen, vlen := len(item.key), len(item.value)
-		if len(b) < klen+vlen {
-			b = (*[maxAllocSize]byte)(unsafe.Pointer(&b[0]))[:]
-		}
-
 		// Write data for the element to the end of the page.
 		copy(b[0:], item.key)
 		b = b[klen:]

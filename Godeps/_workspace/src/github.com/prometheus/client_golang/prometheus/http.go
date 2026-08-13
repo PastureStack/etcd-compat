@@ -86,13 +86,13 @@ func InstrumentHandlerFunc(handlerName string, handlerFunc func(http.ResponseWri
 // If InstrumentHandlerWithOpts is called as follows, it mimics exactly the
 // behavior of InstrumentHandler:
 //
-//     prometheus.InstrumentHandlerWithOpts(
-//         prometheus.SummaryOpts{
-//              Subsystem:   "http",
-//              ConstLabels: prometheus.Labels{"handler": handlerName},
-//         },
-//         handler,
-//     )
+//	prometheus.InstrumentHandlerWithOpts(
+//	    prometheus.SummaryOpts{
+//	         Subsystem:   "http",
+//	         ConstLabels: prometheus.Labels{"handler": handlerName},
+//	    },
+//	    handler,
+//	)
 //
 // Technical detail: "requests_total" is a CounterVec, not a SummaryVec, so it
 // cannot use SummaryOpts. Instead, a CounterOpts struct is created internally,
@@ -197,6 +197,12 @@ type responseWriterDelegator struct {
 }
 
 func (r *responseWriterDelegator) WriteHeader(code int) {
+	// Prometheus output is plain text. Setting the type before any status is
+	// written prevents browsers from interpreting metric labels as HTML.
+	if r.Header().Get("Content-Type") == "" {
+		r.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	}
+	r.Header().Set("X-Content-Type-Options", "nosniff")
 	r.status = code
 	r.wroteHeader = true
 	r.ResponseWriter.WriteHeader(code)
@@ -206,9 +212,18 @@ func (r *responseWriterDelegator) Write(b []byte) (int, error) {
 	if !r.wroteHeader {
 		r.WriteHeader(http.StatusOK)
 	}
-	n, err := r.ResponseWriter.Write(b)
+	n, err := writeNonHTMLResponse(r.ResponseWriter, b)
 	r.written += int64(n)
 	return n, err
+}
+
+func writeNonHTMLResponse(w http.ResponseWriter, b []byte) (int, error) {
+	header := w.Header()
+	if header.Get("Content-Type") == "" {
+		header.Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	}
+	header.Set("X-Content-Type-Options", "nosniff")
+	return w.Write(b)
 }
 
 type fancyResponseWriterDelegator struct {

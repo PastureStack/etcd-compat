@@ -260,6 +260,10 @@ func TestBadParseRequest(t *testing.T) {
 			mustNewForm(t, "foo", url.Values{"ttl": []string{"-1"}}),
 			etcdErr.EcodeTTLNaN,
 		},
+		{
+			mustNewForm(t, "foo", url.Values{"ttl": []string{"9223372037"}}),
+			etcdErr.EcodeTTLNaN,
+		},
 		// bad values for recursive, sorted, wait, prevExist, dir, stream
 		{
 			mustNewForm(t, "foo", url.Values{"recursive": []string{"hahaha"}}),
@@ -376,6 +380,34 @@ func TestBadParseRequest(t *testing.T) {
 		if !reflect.DeepEqual(got, etcdserverpb.Request{}) {
 			t.Errorf("#%d: unexpected non-empty Request: %#v", i, got)
 		}
+	}
+}
+
+type fixedClock struct {
+	now time.Time
+}
+
+func (clock fixedClock) After(duration time.Duration) <-chan time.Time {
+	return time.After(duration)
+}
+
+func (clock fixedClock) Sleep(duration time.Duration) {
+	time.Sleep(duration)
+}
+
+func (clock fixedClock) Now() time.Time {
+	return clock.now
+}
+
+func TestParseKeyRequestRejectsTTLThatExceedsUnixNanoRange(t *testing.T) {
+	request := mustNewForm(t, "foo", url.Values{"ttl": []string{"8000000000"}})
+	_, err := parseKeyRequest(request, fixedClock{now: time.Date(2026, time.August, 14, 0, 0, 0, 0, time.UTC)})
+	if err == nil {
+		t.Fatal("TTL beyond the Unix nanosecond range unexpectedly succeeded")
+	}
+	etcdError, ok := err.(*etcdErr.Error)
+	if !ok || etcdError.ErrorCode != etcdErr.EcodeTTLNaN {
+		t.Fatalf("error = %v, want TTL validation error", err)
 	}
 }
 

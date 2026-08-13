@@ -1,10 +1,29 @@
 package procfs
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"testing"
 )
+
+func TestAllProcsIgnoresOutOfRangePID(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "123"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "9223372036854775807"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	procs, err := FS(root).AllProcs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(procs) != 1 || procs[0].PID != 123 {
+		t.Fatalf("processes = %#v, want only PID 123", procs)
+	}
+}
 
 func TestSelf(t *testing.T) {
 	fs := FS("fixtures")

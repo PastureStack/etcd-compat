@@ -16,8 +16,54 @@ package command
 
 import (
 	"bytes"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"testing"
 )
+
+func TestManagedTLSFile(t *testing.T) {
+	root, err := ioutil.TempDir("", "etcdctl-tls-root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(root)
+	outside, err := ioutil.TempDir("", "etcdctl-tls-outside")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(outside)
+	if err = os.Mkdir(filepath.Join(root, "client"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(root, "client", "cert.pem")
+	if err = ioutil.WriteFile(want, []byte("certificate"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	outsideFile := filepath.Join(outside, "secret.pem")
+	if err = ioutil.WriteFile(outsideFile, []byte("secret"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := managedTLSFile(want, want)
+	if err != nil || got != want {
+		t.Fatalf("valid TLS path = %q, error = %v; want %q", got, err, want)
+	}
+	for _, malicious := range []string{
+		outsideFile,
+		want + "\n" + outsideFile,
+		filepath.Join(root, "missing.pem"),
+	} {
+		if _, err := managedTLSFile(want, malicious); err == nil {
+			t.Errorf("managedTLSFile accepted %q", malicious)
+		}
+	}
+	symlink := filepath.Join(root, "client", "managed.pem")
+	if err = os.Symlink(outsideFile, symlink); err == nil {
+		if _, err := managedTLSFile(symlink, symlink); err == nil {
+			t.Errorf("managedTLSFile accepted symlink %q", symlink)
+		}
+	}
+}
 
 func TestArgOrStdin(t *testing.T) {
 	tests := []struct {

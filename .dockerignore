@@ -1,1 +1,7 @@
 .git
+/bin
+/gopath
+/migration/cache
+/migration/evidence
+*.etcd
+*.test

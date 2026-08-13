@@ -276,7 +276,7 @@ func (db *DB) mmap(minsz int) error {
 // munmap unmaps the data file from memory.
 func (db *DB) munmap() error {
 	if err := munmap(db); err != nil {
-		return fmt.Errorf("unmap error: " + err.Error())
+		return fmt.Errorf("unmap error: %v", err)
 	}
 	return nil
 }

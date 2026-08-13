@@ -148,6 +148,15 @@ func TestCost(t *testing.T) {
 	}
 }
 
+func TestCostRejectsOutOfRangeEncodedValues(t *testing.T) {
+	suffix := "XajjQvNhvvRt5GSeFk1xFe5l47dONXg781AmZtd869sO8zfsHuw7C"
+	for _, cost := range []string{"-1", "32", "99"} {
+		if _, err := Cost([]byte("$2a$" + cost + "$" + suffix)); err == nil {
+			t.Errorf("encoded cost %q was accepted", cost)
+		}
+	}
+}
+
 func TestCostValidationInHash(t *testing.T) {
 	if testing.Short() {
 		return

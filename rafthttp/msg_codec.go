@@ -16,10 +16,16 @@ package rafthttp
 
 import (
 	"encoding/binary"
+	"errors"
 	"io"
 
 	"github.com/coreos/etcd/pkg/pbutil"
 	"github.com/coreos/etcd/raft/raftpb"
+)
+
+var (
+	readBytesLimit     uint64 = 512 * 1024 * 1024
+	ErrExceedSizeLimit        = errors.New("rafthttp: message size limit exceeded")
 )
 
 // messageEncoder is a encoder that can encode all kinds of messages.
@@ -42,10 +48,17 @@ type messageDecoder struct {
 }
 
 func (dec *messageDecoder) decode() (raftpb.Message, error) {
+	return dec.decodeLimit(readBytesLimit)
+}
+
+func (dec *messageDecoder) decodeLimit(limit uint64) (raftpb.Message, error) {
 	var m raftpb.Message
 	var l uint64
 	if err := binary.Read(dec.r, binary.BigEndian, &l); err != nil {
 		return m, err
+	}
+	if l > limit {
+		return m, ErrExceedSizeLimit
 	}
 	buf := make([]byte, int(l))
 	if _, err := io.ReadFull(dec.r, buf); err != nil {

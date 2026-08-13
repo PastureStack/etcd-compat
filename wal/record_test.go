@@ -16,6 +16,7 @@ package wal
 
 import (
 	"bytes"
+	"encoding/binary"
 	"hash/crc32"
 	"io"
 	"io/ioutil"
@@ -61,6 +62,21 @@ func TestReadRecord(t *testing.T) {
 			t.Errorf("#%d: err = %v, want %v", i, e, tt.we)
 		}
 		rec = &walpb.Record{}
+	}
+}
+
+func TestReadRecordRejectsInvalidSizeBeforeAllocation(t *testing.T) {
+	tests := []int64{-1, maxWALEntrySizeLimit, maxWALEntrySizeLimit + 1}
+	for _, size := range tests {
+		var frame bytes.Buffer
+		if err := binary.Write(&frame, binary.LittleEndian, size); err != nil {
+			t.Fatal(err)
+		}
+		decoder := newDecoder(ioutil.NopCloser(&frame))
+		err := decoder.decode(&walpb.Record{})
+		if err != ErrMaxWALEntrySizeLimitExceeded {
+			t.Fatalf("size %d: error = %v, want %v", size, err, ErrMaxWALEntrySizeLimitExceeded)
+		}
 	}
 }
 

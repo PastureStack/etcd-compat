@@ -361,7 +361,8 @@ func serveVars(w http.ResponseWriter, r *http.Request) {
 }
 
 // TODO: change etcdserver to raft interface when we have it.
-//       add test for healthHandler when we have the interface ready.
+//
+//	add test for healthHandler when we have the interface ready.
 func healthHandler(server *etcdserver.EtcdServer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !allowMethod(w, r.Method, "GET") {
@@ -533,10 +534,11 @@ func parseKeyRequest(r *http.Request, clock clockwork.Clock) (etcdserverpb.Reque
 
 	// TTL is nullable, so leave it null if not specified
 	// or an empty string
-	var ttl *uint64
+	var ttl *int64
 	if len(r.FormValue("ttl")) > 0 {
-		i, err := getUint64(r.Form, "ttl")
-		if err != nil {
+		i, err := strconv.ParseInt(r.FormValue("ttl"), 10, 64)
+		const maxTTLSeconds = int64((1<<63 - 1) / int64(time.Second))
+		if err != nil || i < 0 || i > maxTTLSeconds {
 			return emptyReq, etcdErr.NewRequestError(
 				etcdErr.EcodeTTLNaN,
 				`invalid value for "ttl"`,
@@ -613,7 +615,14 @@ func parseKeyRequest(r *http.Request, clock clockwork.Clock) (etcdserverpb.Reque
 	// Null TTL is equivalent to unset Expiration
 	if ttl != nil {
 		expr := time.Duration(*ttl) * time.Second
-		rr.Expiration = clock.Now().Add(expr).UnixNano()
+		expiresAt := clock.Now().Add(expr)
+		if expiresAt.After(time.Unix(0, 1<<63-1)) {
+			return emptyReq, etcdErr.NewRequestError(
+				etcdErr.EcodeTTLNaN,
+				`invalid value for "ttl"`,
+			)
+		}
+		rr.Expiration = expiresAt.UnixNano()
 	}
 
 	return rr, nil

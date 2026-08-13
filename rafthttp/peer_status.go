@@ -55,13 +55,13 @@ func (s *peerStatus) deactivate(failure failureType, reason string) {
 	defer s.mu.Unlock()
 	msg := fmt.Sprintf("failed to %s %s on %s (%s)", failure.action, s.id, failure.source, reason)
 	if s.active {
-		plog.Errorf(msg)
+		plog.Error(msg)
 		plog.Infof("the connection with %s became inactive", s.id)
 		s.active = false
 		s.activeSince = time.Time{}
 		return
 	}
-	plog.Debugf(msg)
+	plog.Debug(msg)
 }
 
 func (s *peerStatus) isActive() bool {

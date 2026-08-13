@@ -87,7 +87,7 @@ func (fs FS) AllProcs() (Procs, error) {
 
 	p := Procs{}
 	for _, n := range names {
-		pid, err := strconv.ParseInt(n, 10, 64)
+		pid, err := strconv.ParseInt(n, 10, 32)
 		if err != nil {
 			continue
 		}

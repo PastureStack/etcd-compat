@@ -141,7 +141,7 @@ func (b *Bucket) openBucket(value []byte) *Bucket {
 
 	// Save a reference to the inline page if the bucket is inline.
 	if child.root == 0 {
-		child.page = (*page)(unsafe.Pointer(&value[bucketHeaderSize]))
+		child.page = (*page)(unsafe.Add(unsafe.Pointer(&value[0]), bucketHeaderSize))
 	}
 
 	return &child
@@ -594,7 +594,7 @@ func (b *Bucket) write() []byte {
 	*bucket = *b.bucket
 
 	// Convert byte slice to a fake page and write the root node.
-	var p = (*page)(unsafe.Pointer(&value[bucketHeaderSize]))
+	var p = (*page)(unsafe.Add(unsafe.Pointer(&value[0]), bucketHeaderSize))
 	n.write(p)
 
 	return value

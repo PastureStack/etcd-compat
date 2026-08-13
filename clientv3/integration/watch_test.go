@@ -386,9 +386,9 @@ func testWatchWithProgressNotify(t *testing.T, watchOnPut bool) {
 	defer wc.Close()
 
 	testInterval := 3 * time.Second
-	pi := v3rpc.ProgressReportInterval
-	v3rpc.ProgressReportInterval = testInterval
-	defer func() { v3rpc.ProgressReportInterval = pi }()
+	pi := v3rpc.GetProgressReportInterval()
+	v3rpc.SetProgressReportInterval(testInterval)
+	defer func() { v3rpc.SetProgressReportInterval(pi) }()
 
 	opts := []clientv3.OpOption{clientv3.WithProgressNotify()}
 	if watchOnPut {

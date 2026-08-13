@@ -298,6 +298,6 @@ func togRPCError(err error) error {
 	case etcdserver.ErrRequestTooLarge:
 		return rpctypes.ErrRequestTooLarge
 	default:
-		return grpc.Errorf(codes.Internal, err.Error())
+		return grpc.Errorf(codes.Internal, "%s", err.Error())
 	}
 }

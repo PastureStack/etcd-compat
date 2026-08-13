@@ -29,6 +29,27 @@ func (b respBody) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(b))
 }
 
+func TestInstrumentHandlerPreventsContentSniffing(t *testing.T) {
+	for _, explicitHeader := range []bool{false, true} {
+		hndlr := InstrumentHandler("xss-test-handler", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if explicitHeader {
+				w.WriteHeader(http.StatusOK)
+			}
+			w.Write([]byte(`<script>alert("xss")</script>`))
+		}))
+
+		resp := httptest.NewRecorder()
+		hndlr.ServeHTTP(resp, &http.Request{Method: "GET"})
+
+		if got, want := resp.Header().Get("Content-Type"), "text/plain; version=0.0.4; charset=utf-8"; got != want {
+			t.Fatalf("explicitHeader=%t: Content-Type = %q, want %q", explicitHeader, got, want)
+		}
+		if got := resp.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Fatalf("explicitHeader=%t: X-Content-Type-Options = %q, want nosniff", explicitHeader, got)
+		}
+	}
+}
+
 func TestInstrumentHandler(t *testing.T) {
 	defer func(n nower) {
 		now = n.(nower)

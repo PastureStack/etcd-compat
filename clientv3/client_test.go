@@ -55,6 +55,24 @@ func TestDialTimeout(t *testing.T) {
 	}
 }
 
+func TestEndpointDialAddress(t *testing.T) {
+	tests := []struct {
+		endpoint string
+		network  string
+		address  string
+	}{
+		{endpoint: "unix://localhost:node.sock", network: "unix", address: "localhost:node.sock"},
+		{endpoint: "127.0.0.1:2379", network: "tcp", address: "127.0.0.1:2379"},
+		{endpoint: "https://etcd.test-stack:2379", network: "tcp", address: "https://etcd.test-stack:2379"},
+	}
+	for _, test := range tests {
+		network, address := endpointDialAddress(test.endpoint)
+		if network != test.network || address != test.address {
+			t.Errorf("endpoint %q: got (%q, %q), want (%q, %q)", test.endpoint, network, address, test.network, test.address)
+		}
+	}
+}
+
 func TestIsHalted(t *testing.T) {
 	if !isHalted(nil, fmt.Errorf("etcdserver: some etcdserver error")) {
 		t.Errorf(`error prefixed with "etcdserver: " should be Halted`)

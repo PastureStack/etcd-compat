@@ -166,9 +166,9 @@ func main() {
 
 	ports := []uint16{}
 	for _, p := range strings.Split(*portsArg, ",") {
-		port, err := strconv.Atoi(p)
+		port, err := parsePort(p)
 		if err == nil {
-			ports = append(ports, uint16(port))
+			ports = append(ports, port)
 		} else {
 			fmt.Fprintf(os.Stderr, "Failed to parse port \"%s\": %v\n", p, err)
 			os.Exit(1)
@@ -226,4 +226,15 @@ func main() {
 			}
 		}
 	}
+}
+
+func parsePort(value string) (uint16, error) {
+	port, err := strconv.ParseUint(strings.TrimSpace(value), 10, 16)
+	if err != nil {
+		return 0, err
+	}
+	if port == 0 {
+		return 0, fmt.Errorf("port must be between 1 and 65535")
+	}
+	return uint16(port), nil
 }

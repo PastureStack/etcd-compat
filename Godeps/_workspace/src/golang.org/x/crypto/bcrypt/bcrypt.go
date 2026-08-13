@@ -184,6 +184,9 @@ func newFromHash(hashedSecret []byte) (*hashed, error) {
 }
 
 func bcrypt(password []byte, cost int, salt []byte) ([]byte, error) {
+	if err := checkCost(cost); err != nil {
+		return nil, err
+	}
 	cipherData := make([]byte, len(magicCipherData))
 	copy(cipherData, magicCipherData)
 
@@ -270,10 +273,11 @@ func (p *hashed) decodeVersion(sbytes []byte) (int, error) {
 
 // sbytes should begin where decodeVersion left off.
 func (p *hashed) decodeCost(sbytes []byte) (int, error) {
-	cost, err := strconv.Atoi(string(sbytes[0:2]))
+	parsedCost, err := strconv.ParseUint(string(sbytes[0:2]), 10, 8)
 	if err != nil {
 		return -1, err
 	}
+	cost := int(parsedCost)
 	err = checkCost(cost)
 	if err != nil {
 		return -1, err

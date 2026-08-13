@@ -1,5 +1,25 @@
 # etcd
 
+## PastureStack compatibility runtime
+
+This GitHub fork packages the preserved etcd 2.3.7 storage and protocol boundary for PastureStack. The current package candidate is plain semantic version `2.3.8`; if publication is separately approved, its image tag will be `ghcr.io/pasturestack/etcd-compat:v2.3.8`. The underlying upstream engine remains 2.3.7 and is explicitly identified as an end-of-life import boundary, not a supported etcd release.
+
+The candidate uses a digest-pinned Ubuntu 26.04 base, the `20260808T000000Z` Ubuntu package snapshot, exact direct-package versions, Go 1.26.5 with an archive checksum, and an exact checksum-verified helper source archive. A small maintained patch corrects the helper's formatting and integer-conversion defects so current compiler, vet, and race checks can run without suppressions. The release gate builds the current commit instead of reusing a previously published image.
+
+The maintained health checks use mutual TLS and verify the managed service identity `etcd.<stack>`. Connecting through a container name or the loopback listener never disables certificate verification.
+
+The preserved v3 client accepts Unix socket endpoints whose filenames contain a colon on current Go toolchains. Internal gRPC errors also use fixed format strings so Go 1.26 validation does not reinterpret upstream error text as a format string.
+
+Three public private-key fixtures inherited from upstream remain only for the original HTTP/2 demo and etcd integration tests. They are unsafe for any deployment, are excluded from the runtime image, and are covered by exact path and content-hash gates. `trivy-secret.yaml` suppresses only those hash-pinned fixtures; every other detected secret blocks publication.
+
+PastureStack is an independent community effort to preserve, audit, and modernize the Rancher 1.6 ecosystem. It is not affiliated with or endorsed by Rancher Labs or SUSE.
+
+**Upstream:** [`rancher/etcd`](https://github.com/rancher/etcd), in the public etcd fork network. This fork preserves upstream Git history, authorship, dates, tags, and license notices. PastureStack maintenance is consolidated into one commit after upstream version `v2.3.7`.
+
+Existing compatibility artifacts remain immutable. Future PastureStack release versions use plain numeric semantic versions with no brand or maintenance-count suffix. The review-only [etcd v2 data migration gate](migration/README.md) defines the sequential path and the blockers that must be closed before the compatibility runtime can be replaced.
+
+See [PASTURESTACK_MAINTENANCE.md](PASTURESTACK_MAINTENANCE.md), [ORIGIN.md](ORIGIN.md), [COMPATIBILITY.md](COMPATIBILITY.md), [SECURITY.md](SECURITY.md), and [migration/README.md](migration/README.md).
+
 [![Go Report Card](https://goreportcard.com/badge/github.com/coreos/etcd)](https://goreportcard.com/report/github.com/coreos/etcd)
 [![Build Status](https://travis-ci.org/coreos/etcd.svg?branch=master)](https://travis-ci.org/coreos/etcd)
 [![Build Status](https://semaphoreci.com/api/v1/projects/406f9909-2f4f-4839-b59e-95082cb088f1/575109/badge.svg)](https://semaphoreci.com/coreos/etcd)

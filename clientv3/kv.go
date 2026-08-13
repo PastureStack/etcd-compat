@@ -183,13 +183,13 @@ func (kv *kv) Do(ctx context.Context, op Op) (OpResponse, error) {
 }
 
 func (kv *kv) switchRemote(prevErr error) error {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
 	newConn, err := kv.c.retryConnection(kv.conn, prevErr)
 	if err != nil {
 		return err
 	}
-
-	kv.mu.Lock()
-	defer kv.mu.Unlock()
 
 	kv.conn = newConn
 	kv.remote = pb.NewKVClient(kv.conn)

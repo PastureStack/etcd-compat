@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -147,6 +148,7 @@ func getEndpoints(c *cli.Context) ([]string, error) {
 }
 
 func getTransport(c *cli.Context) (*http.Transport, error) {
+	const trustedTLSRoot = "/etc/etcd/ssl"
 	cafile := c.GlobalString("ca-file")
 	certfile := c.GlobalString("cert-file")
 	keyfile := c.GlobalString("key-file")
@@ -154,13 +156,25 @@ func getTransport(c *cli.Context) (*http.Transport, error) {
 	// Use an environment variable if nothing was supplied on the
 	// command line
 	if cafile == "" {
-		cafile = os.Getenv("ETCDCTL_CA_FILE")
+		var err error
+		cafile, err = managedTLSFile(filepath.Join(trustedTLSRoot, "ca.pem"), os.Getenv("ETCDCTL_CA_FILE"))
+		if err != nil {
+			return nil, err
+		}
 	}
 	if certfile == "" {
-		certfile = os.Getenv("ETCDCTL_CERT_FILE")
+		var err error
+		certfile, err = managedTLSFile(filepath.Join(trustedTLSRoot, "cert.pem"), os.Getenv("ETCDCTL_CERT_FILE"))
+		if err != nil {
+			return nil, err
+		}
 	}
 	if keyfile == "" {
-		keyfile = os.Getenv("ETCDCTL_KEY_FILE")
+		var err error
+		keyfile, err = managedTLSFile(filepath.Join(trustedTLSRoot, "key.pem"), os.Getenv("ETCDCTL_KEY_FILE"))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	tls := transport.TLSInfo{
@@ -175,6 +189,25 @@ func getTransport(c *cli.Context) (*http.Transport, error) {
 		dialTimeout = totalTimeout
 	}
 	return transport.NewTransport(tls, dialTimeout)
+}
+
+func managedTLSFile(expected, candidate string) (string, error) {
+	if candidate == "" {
+		return "", nil
+	}
+	if candidate != expected {
+		return "", fmt.Errorf("managed TLS environment variable must name %s", expected)
+	}
+	rootInfo, err := os.Lstat(filepath.Dir(expected))
+	if err != nil || rootInfo.Mode()&os.ModeSymlink != 0 || !rootInfo.IsDir() {
+		return "", fmt.Errorf("managed TLS directory is unavailable or unsafe")
+	}
+	fileInfo, err := os.Lstat(expected)
+	if err != nil || fileInfo.Mode()&os.ModeSymlink != 0 || !fileInfo.Mode().IsRegular() {
+		return "", fmt.Errorf("managed TLS file is unavailable or unsafe")
+	}
+	// Return the trusted constant rather than the environment-derived value.
+	return expected, nil
 }
 
 func getUsernamePasswordFromFlag(usernameFlag string) (username string, password string, err error) {

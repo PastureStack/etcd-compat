@@ -281,7 +281,9 @@ func (t *Transport) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Res
 	for {
 		cc, err := t.connPool().GetClientConn(req, addr)
 		if err != nil {
-			t.vlogf("http2: Transport failed to get client conn for %s: %v", addr, err)
+			// The authority and returned error can contain request-controlled text.
+			// Do not copy either value into logs.
+			t.vlogf("http2: Transport failed to get client connection")
 			return nil, err
 		}
 		res, err := cc.RoundTrip(req)
@@ -289,7 +291,7 @@ func (t *Transport) RoundTripOpt(req *http.Request, opt RoundTripOpt) (*http.Res
 			continue
 		}
 		if err != nil {
-			t.vlogf("RoundTrip failure: %v", err)
+			t.vlogf("http2: Transport round trip failed")
 			return nil, err
 		}
 		return res, nil
@@ -1022,7 +1024,9 @@ func (cc *ClientConn) encodeTrailers(req *http.Request) []byte {
 
 func (cc *ClientConn) writeHeader(name, value string) {
 	if VerboseLogs {
-		log.Printf("http2: Transport encoding header %q = %q", name, value)
+		// Header values can contain credentials, cookies, or caller-controlled
+		// data. Do not copy request-controlled header data into diagnostic logs.
+		log.Printf("http2: Transport encoding a request header")
 	}
 	cc.henc.WriteField(hpack.HeaderField{Name: name, Value: value})
 }

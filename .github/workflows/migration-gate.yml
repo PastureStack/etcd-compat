@@ -1,0 +1,289 @@
+name: Manual security and migration gate
+
+on:
+  push:
+    branches:
+      - 'verification/etcd-compat-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: etcd-compat-security-migration-main
+  cancel-in-progress: false
+
+jobs:
+  security-and-migration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      IMAGE: pasturestack/etcd-compat:v2.3.8
+      GO_BASE_IMAGE: pasturestack-etcd-compat-go-base:security-gate
+      ETCD_BUILDER_IMAGE: pasturestack-etcd-compat-builder:security-gate
+      TRIVY_IMAGE: aquasec/trivy:0.73.0@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c
+      TRIVY_CACHE_DIR: /tmp/pasturestack-etcd-compat-trivy
+
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Record and validate source controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          test "$(git rev-list --count fd17c9101d94703f6f4c3d8d6cfb72b62b894cd7..HEAD)" -eq 1
+          test "$(git status --porcelain | wc -l)" -eq 0
+          bash scripts/validate
+          if grep -R -Eiq \
+            'v[0-9]+\.[0-9]+\.[0-9]+-(pasturestack|rancher)[0-9.]*' \
+            Dockerfile README.md PASTURESTACK_MAINTENANCE.md COMPATIBILITY.md \
+            SECURITY.md package migration security .github; then
+            echo ETCD_COMPAT_BRANDED_VERSION_SUFFIX_PRESENT >&2
+            exit 1
+          fi
+          jq -e '.statements | length == 35' security/openvex.json >/dev/null
+          jq -e '[.statements[].status] | all(. == "not_affected")' security/openvex.json >/dev/null
+          printf '%s\n' "${GITHUB_SHA}" > dist/source-revision.txt
+          cp package/ubuntu-apt.lock dist/ubuntu-apt.lock
+          cp security/openvex.json dist/openvex.json
+
+      - name: Build reproducible candidate and audit stages
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --pull --target go-base \
+            --tag "${GO_BASE_IMAGE}" .
+          docker build --target etcd-builder \
+            --build-arg SOURCE_REVISION="${GITHUB_SHA}" \
+            --tag "${ETCD_BUILDER_IMAGE}" .
+          docker build \
+            --build-arg SOURCE_REVISION="${GITHUB_SHA}" \
+            --build-arg IMAGE_VERSION=2.3.8 \
+            --tag "${IMAGE}" .
+          test "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' "${IMAGE}")" = 2.3.8
+          test "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "${IMAGE}")" = "${GITHUB_SHA}"
+          test "$(docker image inspect --format '{{ index .Config.Labels "io.pasturestack.upstream.version" }}' "${IMAGE}")" = 2.3.7
+          docker run --rm --entrypoint etcd "${IMAGE}" --version 2>&1 | tee dist/etcd-version.txt
+          grep -F 'etcd Version: 2.3.7' dist/etcd-version.txt
+          docker run --rm --entrypoint etcdctl "${IMAGE}" --version 2>&1 | tee dist/etcdctl-version.txt
+          docker run --rm --entrypoint giddyup "${IMAGE}" --help >/dev/null
+          docker run --rm --entrypoint etcdwrapper "${IMAGE}" --help >/dev/null
+          container_id=$(docker create "${IMAGE}")
+          trap 'docker rm -f "${container_id}" >/dev/null 2>&1 || true' EXIT
+          docker cp "${container_id}:/licenses/." dist/licenses
+          docker rm "${container_id}"
+          trap - EXIT
+          test "$(find dist/licenses/etcd-third-party -type f | wc -l)" -ge 20
+          test "$(find dist/licenses/giddyup-third-party -type f | wc -l)" -ge 5
+          docker image inspect "${IMAGE}" > dist/image-inspect.json
+          docker run --rm --entrypoint /bin/bash "${GO_BASE_IMAGE}" -lc \
+            "{ printf 'snapshot\\t%s\\n' '20260808T000000Z'; dpkg-query -W -f='\${binary:Package}\\t\${Version}\\n'; } | LC_ALL=C sort" \
+            > dist/go-base-apt-packages.tsv
+
+      - name: Run maintained core tests in the exact builder
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint /bin/bash "${ETCD_BUILDER_IMAGE}" -lc '
+            set -euo pipefail
+            cd /src
+            test -L /src/gopath/src/github.com/coreos/etcd
+            export GOPATH=/src/gopath
+            go test -race -count=1 -timeout 15m \
+              github.com/coreos/etcd/Godeps/_workspace/src/github.com/boltdb/bolt \
+              github.com/coreos/etcd/client \
+              github.com/coreos/etcd/clientv3 \
+              github.com/coreos/etcd/clientv3/integration \
+              github.com/coreos/etcd/storage \
+              github.com/coreos/etcd/store \
+              github.com/coreos/etcd/etcdserver \
+              github.com/coreos/etcd/etcdserver/etcdhttp \
+              github.com/coreos/etcd/package/etcdwrapper \
+              github.com/coreos/etcd/rafthttp \
+              github.com/coreos/etcd/wal \
+              github.com/coreos/etcd/snap
+          '
+
+      - name: Run focused security regressions in the exact builder
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint /bin/bash "${ETCD_BUILDER_IMAGE}" -lc '
+            set -euo pipefail
+            cd /src
+            export GOPATH=/src/gopath
+            go test -vet=off -count=1 github.com/coreos/etcd/etcdctl/command -run "TestManagedTLSFile"
+            go test -vet=off -count=1 github.com/coreos/etcd/Godeps/_workspace/src/github.com/prometheus/client_golang/prometheus -run "TestInstrumentHandlerPreventsContentSniffing"
+            go test -vet=off -count=1 github.com/coreos/etcd/Godeps/_workspace/src/github.com/prometheus/procfs -run "TestAllProcsIgnoresOutOfRangePID"
+            go test -count=1 github.com/coreos/etcd/Godeps/_workspace/src/golang.org/x/crypto/bcrypt -run "TestCostRejectsOutOfRangeEncodedValues"
+            go test -count=1 github.com/coreos/etcd/Godeps/_workspace/src/google.golang.org/grpc/transport -run "TestGRPCStatusBounds"
+            go test -count=1 github.com/coreos/etcd/security/regression -run "TestProtobufFieldNumberBounds"
+          '
+
+      - name: Scan source and images and create SBOMs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${TRIVY_CACHE_DIR}"
+          socket_group="$(stat -c '%g' /var/run/docker.sock)"
+          docker pull "${TRIVY_IMAGE}"
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -v "${TRIVY_CACHE_DIR}:/tmp/trivy-cache" \
+            "${TRIVY_IMAGE}" image --cache-dir /tmp/trivy-cache --download-db-only
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -v "${TRIVY_CACHE_DIR}:/tmp/trivy-cache" \
+            -v "${GITHUB_WORKSPACE}:/workspace:ro" \
+            -v "${GITHUB_WORKSPACE}/dist:/evidence" \
+            "${TRIVY_IMAGE}" fs --cache-dir /tmp/trivy-cache \
+            --skip-db-update --scanners secret \
+            --secret-config /workspace/trivy-secret.yaml --format json \
+            --output /evidence/source-secrets.json /workspace
+          for image_name in "${IMAGE}" "${GO_BASE_IMAGE}" "${ETCD_BUILDER_IMAGE}"; do
+            case "${image_name}" in
+              "${IMAGE}") stem=candidate ;;
+              "${GO_BASE_IMAGE}") stem=go-base ;;
+              *) stem=etcd-builder ;;
+            esac
+            docker run --rm --user "$(id -u):$(id -g)" \
+              --group-add "${socket_group}" \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "${TRIVY_CACHE_DIR}:/tmp/trivy-cache" \
+              -v "${GITHUB_WORKSPACE}:/workspace:ro" \
+              -v "${GITHUB_WORKSPACE}/dist:/evidence" \
+              "${TRIVY_IMAGE}" image --cache-dir /tmp/trivy-cache \
+              --skip-db-update --scanners vuln,secret \
+              --secret-config /workspace/trivy-secret.yaml \
+              --severity CRITICAL,HIGH --format json \
+              --output "/evidence/${stem}-trivy.json" "${image_name}"
+            if [ "${stem}" = candidate ]; then
+              cp dist/candidate-trivy.json dist/candidate-applicable-trivy.json
+            else
+              docker run --rm --user "$(id -u):$(id -g)" \
+                --group-add "${socket_group}" \
+                -v /var/run/docker.sock:/var/run/docker.sock \
+                -v "${TRIVY_CACHE_DIR}:/tmp/trivy-cache" \
+                -v "${GITHUB_WORKSPACE}:/workspace:ro" \
+                -v "${GITHUB_WORKSPACE}/dist:/evidence" \
+                "${TRIVY_IMAGE}" image --cache-dir /tmp/trivy-cache \
+                --skip-db-update --scanners vuln,secret \
+                --secret-config /workspace/trivy-secret.yaml \
+                --vex /workspace/security/openvex.json \
+                --severity CRITICAL,HIGH --format json \
+                --output "/evidence/${stem}-applicable-trivy.json" "${image_name}"
+            fi
+            docker run --rm --user "$(id -u):$(id -g)" \
+              --group-add "${socket_group}" \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "${TRIVY_CACHE_DIR}:/tmp/trivy-cache" \
+              -v "${GITHUB_WORKSPACE}/dist:/evidence" \
+              "${TRIVY_IMAGE}" image --cache-dir /tmp/trivy-cache \
+              --skip-db-update --scanners vuln \
+              --format cyclonedx --output "/evidence/${stem}.cdx.json" "${image_name}"
+          done
+
+      - name: Run three-member sequential data migration
+        shell: bash
+        env:
+          ETCD_COMPAT_IMAGE: pasturestack/etcd-compat:v2.3.8
+          ETCD_MIGRATION_EVIDENCE_DIR: ${{ github.workspace }}/dist/migration
+        run: |
+          set -euo pipefail
+          bash migration/test-v2-to-v3.sh
+
+      - name: Finalize and enforce evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_secret_count=$(jq '[.Results[]?.Secrets[]?] | length' dist/source-secrets.json)
+
+          jq -r '.statements[] | .vulnerability.name as $cve | .products[] | [$cve, .["@id"]] | @tsv' \
+            security/openvex.json | LC_ALL=C sort -u > dist/openvex-statements.tsv
+          test "$(wc -l < dist/openvex-statements.tsv)" -eq 35
+          for stem in go-base etcd-builder; do
+            jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL" or .Severity == "HIGH") | [.VulnerabilityID, .PkgIdentifier.PURL] | @tsv' \
+              "dist/${stem}-trivy.json" | LC_ALL=C sort -u > "dist/${stem}-openvex-input.tsv"
+            diff -u dist/openvex-statements.tsv "dist/${stem}-openvex-input.tsv"
+          done
+
+          candidate_raw_critical=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' dist/candidate-trivy.json)
+          candidate_raw_high=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' dist/candidate-trivy.json)
+          candidate_raw_secret=$(jq '[.Results[]?.Secrets[]?] | length' dist/candidate-trivy.json)
+          candidate_applicable_critical=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' dist/candidate-applicable-trivy.json)
+          candidate_applicable_high=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' dist/candidate-applicable-trivy.json)
+          candidate_applicable_secret=$(jq '[.Results[]?.Secrets[]?] | length' dist/candidate-applicable-trivy.json)
+          go_base_raw_critical=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' dist/go-base-trivy.json)
+          go_base_raw_high=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' dist/go-base-trivy.json)
+          go_base_raw_secret=$(jq '[.Results[]?.Secrets[]?] | length' dist/go-base-trivy.json)
+          go_base_applicable_critical=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' dist/go-base-applicable-trivy.json)
+          go_base_applicable_high=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' dist/go-base-applicable-trivy.json)
+          go_base_applicable_secret=$(jq '[.Results[]?.Secrets[]?] | length' dist/go-base-applicable-trivy.json)
+          builder_raw_critical=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' dist/etcd-builder-trivy.json)
+          builder_raw_high=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' dist/etcd-builder-trivy.json)
+          builder_raw_secret=$(jq '[.Results[]?.Secrets[]?] | length' dist/etcd-builder-trivy.json)
+          builder_applicable_critical=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' dist/etcd-builder-applicable-trivy.json)
+          builder_applicable_high=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' dist/etcd-builder-applicable-trivy.json)
+          builder_applicable_secret=$(jq '[.Results[]?.Secrets[]?] | length' dist/etcd-builder-applicable-trivy.json)
+          jq -n \
+            --argjson sourceSecrets "${source_secret_count}" \
+            --argjson candidateRawCritical "${candidate_raw_critical}" \
+            --argjson candidateRawHigh "${candidate_raw_high}" \
+            --argjson candidateRawSecrets "${candidate_raw_secret}" \
+            --argjson candidateApplicableCritical "${candidate_applicable_critical}" \
+            --argjson candidateApplicableHigh "${candidate_applicable_high}" \
+            --argjson candidateApplicableSecrets "${candidate_applicable_secret}" \
+            --argjson goBaseRawCritical "${go_base_raw_critical}" \
+            --argjson goBaseRawHigh "${go_base_raw_high}" \
+            --argjson goBaseRawSecrets "${go_base_raw_secret}" \
+            --argjson goBaseApplicableCritical "${go_base_applicable_critical}" \
+            --argjson goBaseApplicableHigh "${go_base_applicable_high}" \
+            --argjson goBaseApplicableSecrets "${go_base_applicable_secret}" \
+            --argjson builderRawCritical "${builder_raw_critical}" \
+            --argjson builderRawHigh "${builder_raw_high}" \
+            --argjson builderRawSecrets "${builder_raw_secret}" \
+            --argjson builderApplicableCritical "${builder_applicable_critical}" \
+            --argjson builderApplicableHigh "${builder_applicable_high}" \
+            --argjson builderApplicableSecrets "${builder_applicable_secret}" \
+            '{source:{secrets:$sourceSecrets},candidate:{raw:{critical:$candidateRawCritical,high:$candidateRawHigh,secrets:$candidateRawSecrets},applicable:{critical:$candidateApplicableCritical,high:$candidateApplicableHigh,secrets:$candidateApplicableSecrets}},goBase:{raw:{critical:$goBaseRawCritical,high:$goBaseRawHigh,secrets:$goBaseRawSecrets},applicable:{critical:$goBaseApplicableCritical,high:$goBaseApplicableHigh,secrets:$goBaseApplicableSecrets}},etcdBuilder:{raw:{critical:$builderRawCritical,high:$builderRawHigh,secrets:$builderRawSecrets},applicable:{critical:$builderApplicableCritical,high:$builderApplicableHigh,secrets:$builderApplicableSecrets}}}' \
+            > dist/security-counts.json
+          test "${source_secret_count}" -eq 0
+          test "${candidate_raw_critical}" -eq 0
+          test "${candidate_raw_high}" -eq 0
+          test "${candidate_raw_secret}" -eq 0
+          test "${candidate_applicable_critical}" -eq 0
+          test "${candidate_applicable_high}" -eq 0
+          test "${candidate_applicable_secret}" -eq 0
+          test "${go_base_raw_secret}" -eq 0
+          test "${go_base_applicable_critical}" -eq 0
+          test "${go_base_applicable_high}" -eq 0
+          test "${go_base_applicable_secret}" -eq 0
+          test "${builder_raw_secret}" -eq 0
+          test "${builder_applicable_critical}" -eq 0
+          test "${builder_applicable_high}" -eq 0
+          test "${builder_applicable_secret}" -eq 0
+          grep -Fx 'status=passed' dist/migration/result.env
+          grep -Fx 'source_package=2.3.8' dist/migration/result.env
+          grep -Fx 'source_engine=2.3.7' dist/migration/result.env
+          grep -Fx 'target=3.7.1' dist/migration/result.env
+          find dist -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z | \
+            xargs -0 sha256sum > dist/SHA256SUMS
+
+      - name: Upload review evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: etcd-compat-security-evidence-${{ github.run_id }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Clean runner resources
+        if: always()
+        shell: bash
+        run: |
+          docker image rm -f "${IMAGE}" "${GO_BASE_IMAGE}" "${ETCD_BUILDER_IMAGE}" >/dev/null 2>&1 || true
+          rm -rf -- "${TRIVY_CACHE_DIR}"

@@ -16,6 +16,8 @@ package rafthttp
 
 import (
 	"bytes"
+	"encoding/binary"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -61,5 +63,16 @@ func TestMessage(t *testing.T) {
 		if !reflect.DeepEqual(m, tt) {
 			t.Errorf("#%d: message = %+v, want %+v", i, m, tt)
 		}
+	}
+}
+
+func TestMessageDecoderRejectsOversizedFrameBeforeAllocation(t *testing.T) {
+	var frame bytes.Buffer
+	if err := binary.Write(&frame, binary.BigEndian, uint64(17)); err != nil {
+		t.Fatal(err)
+	}
+	decoder := &messageDecoder{r: &frame}
+	if _, err := decoder.decodeLimit(16); !errors.Is(err, ErrExceedSizeLimit) {
+		t.Fatalf("decode error = %v, want %v", err, ErrExceedSizeLimit)
 	}
 }

@@ -112,7 +112,9 @@ func runSet(ki client.KeysAPI, setc chan set, wg *sync.WaitGroup) {
 		}
 		_, err := ki.Set(context.TODO(), s.key, s.value, &client.SetOptions{TTL: time.Duration(s.ttl) * time.Second})
 		if err != nil {
-			log.Fatalf("failed to copy key: %v\n", err)
+			// Client errors can contain a request URL or key supplied by the
+			// operator. Avoid copying that untrusted text into terminal logs.
+			log.Fatalf("failed to copy key (%T)", err)
 		}
 	}
 	wg.Done()
