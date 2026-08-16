@@ -4,7 +4,7 @@
 
 This GitHub fork packages the preserved etcd 2.3.7 storage and protocol boundary for PastureStack. The current package candidate is plain semantic version `2.3.8`; if publication is separately approved, its image tag will be `ghcr.io/pasturestack/etcd-compat:v2.3.8`. The underlying upstream engine remains 2.3.7 and is explicitly identified as an end-of-life import boundary, not a supported etcd release.
 
-The candidate uses a digest-pinned Ubuntu 26.04 base, the `20260808T000000Z` Ubuntu package snapshot, exact direct-package versions, Go 1.26.5 with an archive checksum, and an exact checksum-verified helper source archive. A small maintained patch corrects the helper's formatting and integer-conversion defects so current compiler, vet, and race checks can run without suppressions. The release gate builds the current commit instead of reusing a previously published image.
+The candidate uses a digest-pinned Ubuntu 26.04 base, the `20260808T000000Z` Ubuntu package snapshot, exact direct-package versions, Go 1.26.6 with an archive checksum, and an exact checksum-verified helper source archive. A small maintained patch corrects the helper's formatting and integer-conversion defects so current compiler, vet, and race checks can run without suppressions. The release gate builds the current commit instead of reusing a previously published image.
 
 The maintained health checks use mutual TLS and verify the managed service identity `etcd.<stack>`. Connecting through a container name or the loopback listener never disables certificate verification.
 

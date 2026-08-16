@@ -16,8 +16,8 @@ RUN set -eux; \
     rm -f /tmp/ca-certificates.deb /tmp/openssl.deb
 
 FROM ${UBUNTU_IMAGE} AS go-base
-ARG GO_VERSION=1.26.5
-ARG GO_LINUX_AMD64_SHA256=5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053
+ARG GO_VERSION=1.26.6
+ARG GO_LINUX_AMD64_SHA256=708effb774be8237570d0add163225abbdfaf4fca28b2611df167beba4feef89
 ARG BUILD_GOMAXPROCS=2
 COPY package/ubuntu-apt.lock /tmp/ubuntu-apt.lock
 COPY --from=ca-trust /etc/ca-certificates.conf /etc/ca-certificates.conf

@@ -1,9 +1,12 @@
 name: Manual security and migration gate
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
-      - 'verification/etcd-compat-*'
+      - main
   workflow_dispatch:
 
 permissions:
@@ -21,12 +24,12 @@ jobs:
       IMAGE: pasturestack/etcd-compat:v2.3.8
       GO_BASE_IMAGE: pasturestack-etcd-compat-go-base:security-gate
       ETCD_BUILDER_IMAGE: pasturestack-etcd-compat-builder:security-gate
-      TRIVY_IMAGE: aquasec/trivy:0.73.0@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c
+      TRIVY_IMAGE: aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
       TRIVY_CACHE_DIR: /tmp/pasturestack-etcd-compat-trivy
 
     steps:
       - name: Check out candidate
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -36,7 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          test "$(git rev-list --count fd17c9101d94703f6f4c3d8d6cfb72b62b894cd7..HEAD)" -eq 1
+          git merge-base --is-ancestor fd17c9101d94703f6f4c3d8d6cfb72b62b894cd7 HEAD
           test "$(git status --porcelain | wc -l)" -eq 0
           bash scripts/validate
           if grep -R -Eiq \

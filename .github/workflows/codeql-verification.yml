@@ -1,9 +1,12 @@
 name: CodeQL verification
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
-      - 'verification/etcd-compat-*'
+      - main
   workflow_dispatch:
 
 permissions:
@@ -19,7 +22,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Check out candidate
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -29,18 +32,18 @@ jobs:
         run: |
           set -euo pipefail
           test -z "$(git status --porcelain)"
-          test "$(git rev-list --count fd17c9101d94703f6f4c3d8d6cfb72b62b894cd7..HEAD)" -eq 1
+          git merge-base --is-ancestor fd17c9101d94703f6f4c3d8d6cfb72b62b894cd7 HEAD
 
       - name: Install checksum-pinned Go toolchain
         shell: bash
         run: |
           set -euo pipefail
-          archive="$RUNNER_TEMP/go1.26.5.linux-amd64.tar.gz"
+          archive="$RUNNER_TEMP/go1.26.6.linux-amd64.tar.gz"
           curl --fail --silent --show-error --location \
             --output "$archive" \
-            'https://go.dev/dl/go1.26.5.linux-amd64.tar.gz'
+            'https://go.dev/dl/go1.26.6.linux-amd64.tar.gz'
           printf '%s  %s\n' \
-            '5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053' \
+            '708effb774be8237570d0add163225abbdfaf4fca28b2611df167beba4feef89' \
             "$archive" | sha256sum --check
           tar -C "$RUNNER_TEMP" -xzf "$archive"
           "$RUNNER_TEMP/go/bin/go" version
@@ -48,7 +51,7 @@ jobs:
           printf 'GOROOT=%s\n' "$RUNNER_TEMP/go" >> "$GITHUB_ENV"
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@988661ebb5e81487b3fb31b2185d2856c0a10679 # v4
+        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           languages: go
           build-mode: manual
@@ -71,7 +74,7 @@ jobs:
           CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/etcdwrapper" github.com/coreos/etcd/package/etcdwrapper
 
       - name: Analyze without publishing temporary alerts
-        uses: github/codeql-action/analyze@988661ebb5e81487b3fb31b2185d2856c0a10679 # v4
+        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           category: /language:go
           upload: never
