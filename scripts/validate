@@ -19,6 +19,18 @@ done
 
 bash migration/tests/test-checkpoints.sh
 
+kubernetes_deploy_image='quay.io/coreos/etcd:v2.3.7@sha256:797c185fcf07f1fecf228665ebf8cf7f1b2172853e9dfc02d2d718c582c77493'
+if [ "$(grep -Fc "image: ${kubernetes_deploy_image}" hack/kubernetes-deploy/etcd.yml)" -ne 3 ]; then
+    echo "ETCD_COMPAT_KUBERNETES_IMAGE_LOCK_CHANGED" >&2
+    exit 1
+fi
+
+if grep -R -Eq '^[[:space:]]*image:[[:space:]]+[^[:space:]]+:latest([[:space:]]|$)' \
+    hack/kubernetes-deploy --include='*.yml' --include='*.yaml'; then
+    echo "ETCD_COMPAT_KUBERNETES_FLOATING_IMAGE_PRESENT" >&2
+    exit 1
+fi
+
 required_markers=(
     'ARG UBUNTU_IMAGE=ubuntu:26.04@sha256:678c6550cc43645e08669028bc177f50be4e7c5b8cca677067b1914d4afc7a03'
     'GO_VERSION=1.26.5'

@@ -2,6 +2,8 @@
 
 This is an example setting up etcd as a set of pods and services running on top of kubernetes. Using:
 
+The example intentionally pins the upstream `v2.3.7` Linux/AMD64 image by its registry digest. That engine version matches the compatibility source in this repository. The preserved image uses the Docker schema 1 manifest format, so runtimes that reject schema 1 cannot use this example. Update the tag and digest together only after compatibility review; never replace the reference with a floating tag.
+
 ```
 $ kubectl create -f etcd.yml 
 services/etcd-client
