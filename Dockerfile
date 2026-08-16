@@ -46,6 +46,7 @@ RUN set -eux; \
         patch="${UBUNTU_APT_PATCH_VERSION}" \
         tar="${UBUNTU_APT_TAR_VERSION}"; \
     rm -rf /var/lib/apt/lists/*; \
+    rm -f /usr/bin/pebble; \
     curl --fail --silent --show-error --location --retry 5 --retry-all-errors \
         --output /tmp/go.tgz "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz"; \
     echo "${GO_LINUX_AMD64_SHA256}  /tmp/go.tgz" | sha256sum -c -; \
