@@ -33,8 +33,8 @@ fi
 
 required_markers=(
     'ARG UBUNTU_IMAGE=ubuntu:26.04@sha256:678c6550cc43645e08669028bc177f50be4e7c5b8cca677067b1914d4afc7a03'
-    'GO_VERSION=1.26.6'
-    'GO_LINUX_AMD64_SHA256=708effb774be8237570d0add163225abbdfaf4fca28b2611df167beba4feef89'
+    'GO_VERSION=1.27.0'
+    'GO_LINUX_AMD64_SHA256=675c26c449cbb18fc24b74650de1eabbae6e16f64326fd85a283fb3b58280685'
     'rm -f /usr/bin/pebble'
     'org.opencontainers.image.source="https://github.com/PastureStack/etcd-compat"'
     'ARG IMAGE_VERSION=2.3.8'
