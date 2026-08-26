@@ -1,12 +1,6 @@
-name: Manual security and migration gate
+name: Retired migration evidence gate
 
 on:
-  pull_request:
-    branches:
-      - main
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:

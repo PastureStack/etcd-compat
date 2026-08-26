@@ -4,7 +4,9 @@ PastureStack is an independent community effort to preserve, audit, and moderniz
 
 This GitHub fork keeps the etcd 2.3.7 storage and protocol boundary buildable on maintained toolchains and base images. Git history, authorship, dates, tags, copyright notices, and the Apache-2.0 license remain authoritative for inherited work.
 
-The current PastureStack package candidate is `2.3.8`; `2.3.7` is the preserved upstream engine version. New release and image versions must remain plain numeric semantic versions and must never add a product-name or maintenance-count suffix.
+The former PastureStack package candidate `2.3.8` is retired and must not be
+published. `2.3.7` remains only as the preserved upstream engine version for
+historical migration analysis. There is no supported release line.
 
 Treat every behavior change as storage- and cluster-sensitive. Validate it against single-member and multi-member fixtures, snapshot restore, upgrade, rollback, and the complete PastureStack Kubernetes infrastructure stack before publication.
 

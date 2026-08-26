@@ -2,7 +2,12 @@
 
 ## Supported state
 
-The published image is a compatibility candidate for isolated PastureStack integration testing. It is not a general-purpose or currently supported etcd release.
+This repository is retired and has no supported release line. The historical
+image is retained only as immutable migration evidence; it must not be deployed
+as a new or replacement runtime. Report a vulnerability in the historical
+artifact through the private security advisory channel, but do not publish a
+replacement etcd 2.x image. Active deployments use `PastureStack/etcd-image`
+(etcd 3.7.2). See [RETIREMENT.md](RETIREMENT.md).
 
 ## Review requirements
 

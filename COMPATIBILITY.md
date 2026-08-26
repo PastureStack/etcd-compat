@@ -16,6 +16,14 @@ The managed runtime continues to use the historical `ETCDCTL_*_FILE` variables, 
 
 Unix-domain v3 client endpoints keep the historical `unix://<socket>` contract, including socket filenames containing a colon. Endpoint parsing does not treat that filename suffix as a TCP port.
 
-Before a release, validate single-member and multi-member operation, authenticated TLS, on-disk upgrade and rollback, mixed-version client access, snapshot restore, backup retention, lease and watch behavior, member replacement, and the Kubernetes control-plane lifecycle.
+Before using the migration evidence for a real data set, validate single-member
+and multi-member operation, authenticated TLS, on-disk upgrade and rollback,
+mixed-version client access, snapshot restore, backup retention, lease and watch
+behavior, member replacement, and the Kubernetes control-plane lifecycle.
 
-The `2.3.8` package candidate preserves the upstream 2.3.7 runtime as the active compatibility boundary until every v2 API consumer has a verified v3 replacement. The review-only migration gate crosses each minor version sequentially, performs the offline conversion with the locked 3.4 tool, checks every member's v2store and WAL with 3.5.33, and disables v2 before 3.6. A synthetic pass does not authorize production migration; see [migration/README.md](migration/README.md).
+The abandoned `2.3.8` package candidate preserves the upstream 2.3.7 runtime
+only as a historical migration boundary. The review-only migration gate crosses
+each minor version sequentially, performs the offline conversion with the locked
+3.4 tool, checks every member's v2store and WAL with 3.5.33, and disables v2
+before 3.6. A synthetic pass does not authorize production migration; see
+[migration/README.md](migration/README.md).
